@@ -5,22 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PicQuiz — Guess Who / What</title>
 <script>
-  // Runs synchronously, before first paint, so there's no flash of
-  // un-scaled content. Detects Samsung Tizen / other smart-TV browsers
-  // by their user-agent signature and tags <html> accordingly; the
-  // CSS below then scales the whole page up 150% for that case only.
-  (function(){
-    var ua = navigator.userAgent.toLowerCase();
-    var tvSignatures = [
-      "tizen", "smart-tv", "smarttv", "webos", "web0s",
-      "netcast", "hbbtv", "viera", "aquos", "bravia",
-      "googletv", "appletv", "crkey", "roku"
-    ];
-    var isTV = tvSignatures.some(function(sig){ return ua.indexOf(sig) !== -1; });
-    if(isTV){
-      document.documentElement.classList.add("tv-mode");
-    }
-  })();
+  const isLikelyTV =
+    window.screen.width >= 1920 &&
+    window.devicePixelRatio === 1 &&
+    !('ontouchstart' in window);
+
+  if (isLikelyTV) {
+    document.body.classList.add("tv-mode");
+  }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -45,14 +37,9 @@
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
 
-  /* On Samsung/Tizen and other smart-TV browsers (detected in the
-     head script above), scale the whole page up 150% so it reads
-     comfortably from a couch-viewing distance. `zoom` is non-standard
-     but is supported by the Chromium/WebKit engines these TV browsers
-     use, and — unlike `transform: scale()` — it reflows layout and
-     scrollbars correctly instead of just visually stretching pixels. */
-  html.tv-mode{
-    zoom:1.5;
+  .tv-mode {
+    transform: scale(1.5);
+    transform-origin: top left;
   }
   body{
     min-height:100vh;
