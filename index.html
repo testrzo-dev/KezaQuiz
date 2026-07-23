@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PicQuiz — Guess Who / What</title>
+<script>
+  // Runs synchronously, before first paint, so there's no flash of
+  // un-scaled content. Detects Samsung Tizen / other smart-TV browsers
+  // by their user-agent signature and tags <html> accordingly; the
+  // CSS below then scales the whole page up 150% for that case only.
+  (function(){
+    var ua = navigator.userAgent.toLowerCase();
+    var tvSignatures = [
+      "tizen", "smart-tv", "smarttv", "webos", "web0s",
+      "netcast", "hbbtv", "viera", "aquos", "bravia",
+      "googletv", "appletv", "crkey", "roku"
+    ];
+    var isTV = tvSignatures.some(function(sig){ return ua.indexOf(sig) !== -1; });
+    if(isTV){
+      document.documentElement.classList.add("tv-mode");
+    }
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --teal-900:#0F3D3E;
+    --teal-800:#134A4B;
+    --teal-700:#1B5C5D;
+    --cream:#F6EFDD;
+    --cream-dim:#EAE0C7;
+    --ink:#16302E;
+    --gold:#E8B33D;
+    --gold-dim:#C6952A;
+    --coral:#E2572B;
+    --green:#4F9D69;
+    --radius-card: 18px;
+    --font-display:'Space Grotesk', sans-serif;
+    --font-body:'Inter', sans-serif;
+    --font-mono:'JetBrains Mono', monospace;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+
+  /* On Samsung/Tizen and other smart-TV browsers (detected in the
+     head script above), scale the whole page up 150% so it reads
+     comfortably from a couch-viewing distance. `zoom` is non-standard
+     but is supported by the Chromium/WebKit engines these TV browsers
+     use, and — unlike `transform: scale()` — it reflows layout and
+     scrollbars correctly instead of just visually stretching pixels. */
+  html.tv-mode{
+    zoom:1.5;
+  }
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(232,179,61,0.08), transparent 40%),
+      radial-gradient(circle at 85% 85%, rgba(226,87,43,0.07), transparent 45%),
+      var(--teal-900);
+    color:var(--cream);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .app{
+    max-width:1040px;
+    margin:0 auto;
+    padding:28px 20px 60px;
+  }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:34px;
+  }
+  .brand{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    font-family:var(--font-display);
+  }
+  .brand .mark{
+    font-size:26px;
+    font-weight:700;
+    letter-spacing:0.5px;
+  }
+  .brand .mark span{ color:var(--gold); }
+  .brand .tagline{
+    font-size:12px;
+    color:var(--cream-dim);
+    opacity:0.65;
+    font-family:var(--font-mono);
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+  }
+  .btn-ghost{
+    background:transparent;
+    border:1px solid rgba(246,239,221,0.3);
+    color:var(--cream);
+    font-family:var(--font-mono);
+    font-size:12.5px;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    padding:9px 16px;
+    border-radius:999px;
+    cursor:pointer;
+    transition:border-color .18s ease, background .18s ease;
+  }
+  .btn-ghost:hover{ border-color:var(--gold); background:rgba(232,179,61,0.08); }
+  .btn-ghost:focus-visible, button:focus-visible, input:focus-visible{
+    outline:2px solid var(--gold);
+    outline-offset:2px;
+  }
+  .hidden{ display:none !important; }
+
+  /* ---------- Screen: categories ---------- */
+  .screen-title{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:clamp(26px,4vw,38px);
+    margin:0 0 6px;
+  }
+  .screen-sub{
+    color:var(--cream-dim);
+    opacity:0.75;
+    margin:0 0 30px;
+    font-size:15px;
+  }
+
+  .cat-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(220px,1fr));
+    gap:22px;
+  }
+  .cat-tab{
+    position:relative;
+    background:var(--cream);
+    color:var(--ink);
+    border-radius:14px 14px 4px 4px;
+    padding:26px 22px 20px;
+    cursor:pointer;
+    border:none;
+    text-align:left;
+    font-family:var(--font-body);
+    box-shadow:0 10px 0 -4px rgba(0,0,0,0.12), 0 14px 24px rgba(0,0,0,0.28);
+    transition:transform .16s ease, box-shadow .16s ease;
+  }
+  .cat-tab::before{
+    content:"";
+    position:absolute;
+    top:-11px; left:22px;
+    width:52px; height:14px;
+    background:var(--gold);
+    border-radius:6px 6px 0 0;
+  }
+  .cat-tab:hover{ transform:translateY(-4px); box-shadow:0 14px 0 -4px rgba(0,0,0,0.14), 0 20px 30px rgba(0,0,0,0.32); }
+  .cat-tab:disabled{
+    opacity:0.45; cursor:not-allowed; transform:none;
+    box-shadow:0 10px 0 -4px rgba(0,0,0,0.12), 0 14px 24px rgba(0,0,0,0.2);
+  }
+  .cat-tab:disabled::before{ background:rgba(22,48,46,0.25); }
+  .cat-icon{ font-size:30px; display:block; margin-bottom:10px; }
+  .cat-name{ font-family:var(--font-display); font-weight:700; font-size:19px; margin:0 0 4px; }
+  .cat-count{ font-family:var(--font-mono); font-size:12px; opacity:0.6; letter-spacing:0.04em; }
+
+  /* ---------- Screen: mode select ---------- */
+  .mode-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(230px,1fr));
+    gap:18px;
+    margin-top:6px;
+  }
+  .mode-card{
+    background:var(--teal-800);
+    border:1px solid rgba(246,239,221,0.12);
+    border-radius:var(--radius-card);
+    padding:22px;
+    cursor:pointer;
+    color:var(--cream);
+    text-align:left;
+    font-family:var(--font-body);
+    transition:border-color .16s ease, transform .16s ease, background .16s ease;
+  }
+  .mode-card:hover{ border-color:var(--gold); transform:translateY(-3px); background:var(--teal-700); }
+  .mode-eyebrow{
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--gold);
+    margin-bottom:8px;
+    display:block;
+  }
+  .mode-title{ font-family:var(--font-display); font-weight:700; font-size:18px; margin:0 0 6px; }
+  .mode-desc{ font-size:13.5px; color:var(--cream-dim); opacity:0.8; margin:0; line-height:1.45; }
+
+  /* ---------- Game header / scoreboard ---------- */
+  .game-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:22px;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  .progress-pill{
+    font-family:var(--font-mono);
+    background:var(--teal-800);
+    border:1px solid rgba(246,239,221,0.15);
+    padding:8px 14px;
+    border-radius:999px;
+    font-size:13px;
+    letter-spacing:0.03em;
+  }
+  .scoreboard{
+    font-family:var(--font-mono);
+    font-weight:700;
+    font-size:15px;
+    background:#0A2C2D;
+    border:1px solid rgba(232,179,61,0.35);
+    color:var(--gold);
+    padding:8px 16px;
+    border-radius:8px;
+    letter-spacing:0.06em;
+  }
+
+  /* ---------- Card + flip ---------- */
+  .stage{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:26px;
+  }
+  .card-wrap{
+    perspective:1400px;
+    -webkit-perspective:1400px;
+    width:min(320px, 84vw);
+    height:400px;
+  }
+  .card{
+    position:relative;
+    width:100%; height:100%;
+    transform-style:preserve-3d;
+    -webkit-transform-style:preserve-3d;
+    transition:transform .6s cubic-bezier(.2,.8,.2,1);
+    cursor:pointer;
+  }
+  .card.flipped{ transform:rotateY(180deg); -webkit-transform:rotateY(180deg); }
+  .card.no-anim{ transition:none !important; }
+  .card-face{
+    position:absolute; inset:0;
+    border-radius:var(--radius-card);
+    backface-visibility:hidden;
+    -webkit-backface-visibility:hidden;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:18px;
+    background:var(--cream);
+    box-shadow:0 18px 40px rgba(0,0,0,0.35);
+    overflow:hidden;
+  }
+  .card-face::before{
+    content:"";
+    position:absolute;
+    top:14px; left:14px;
+    width:14px; height:14px;
+    border-radius:50%;
+    background:var(--teal-900);
+    box-shadow:inset 0 0 0 3px var(--cream), 0 0 0 1px rgba(0,0,0,0.15);
+  }
+  .card-front img{
+    width:100%; height:78%;
+    object-fit:contain;
+    border-radius:10px;
+  }
+  .card-front .hint-label{
+    margin-top:10px;
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:rgba(22,48,46,0.5);
+  }
+  .card-front .loading-dot{
+    width:14px;height:14px;border-radius:50%;
+    border:2px solid rgba(22,48,46,0.2);
+    border-top-color:var(--teal-900);
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg);} }
+
+  .card-back{
+    transform:rotateY(180deg);
+    -webkit-transform:rotateY(180deg);
+    color:var(--ink);
+    text-align:center;
+  }
+  .card-back .answer-block{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+  }
+  .card-back .answer-native{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:clamp(20px,5vw,26px);
+    line-height:1.25;
+  }
+  .card-back .answer-en{
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:15px;
+    color:rgba(22,48,46,0.75);
+  }
+  .card-back .answer-en.is-main{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:clamp(20px,5vw,26px);
+    color:var(--ink);
+    line-height:1.25;
+  }
+  .card-back .answer-fr{
+    font-family:var(--font-body);
+    font-style:italic;
+    font-size:13px;
+    color:rgba(22,48,46,0.55);
+  }
+  .card-back .verdict{
+    margin-top:14px;
+    font-family:var(--font-mono);
+    font-size:12.5px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    padding:6px 14px;
+    border-radius:999px;
+  }
+  .verdict.correct{ background:rgba(79,157,105,0.15); color:var(--green); }
+  .verdict.wrong{ background:rgba(226,87,43,0.15); color:var(--coral); }
+  .card.state-correct .card-back{ box-shadow:none; }
+  .card.state-correct .card-face.card-back{ border:3px solid var(--green); }
+  .card.state-wrong .card-face.card-back{ border:3px solid var(--coral); }
+
+  .flip-hint{
+    font-family:var(--font-mono);
+    font-size:11.5px;
+    color:var(--cream-dim);
+    opacity:0.55;
+    letter-spacing:0.04em;
+  }
+
+  /* ---------- Answer controls ---------- */
+  .answer-zone{
+    width:100%;
+    max-width:420px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:14px;
+  }
+  .type-row{
+    display:flex;
+    width:100%;
+    gap:10px;
+  }
+  .type-row input{
+    flex:1;
+    padding:13px 16px;
+    border-radius:10px;
+    border:1px solid rgba(246,239,221,0.25);
+    background:var(--teal-800);
+    color:var(--cream);
+    font-family:var(--font-body);
+    font-size:15px;
+  }
+  .type-row input::placeholder{ color:rgba(246,239,221,0.4); }
+  .btn-solid{
+    background:var(--gold);
+    color:var(--ink);
+    border:none;
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:14px;
+    padding:13px 20px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:background .16s ease, transform .16s ease;
+  }
+  .btn-solid:hover{ background:var(--gold-dim); transform:translateY(-1px); }
+  .btn-solid:disabled{ opacity:0.4; cursor:not-allowed; transform:none; }
+
+  .mc-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    width:100%;
+  }
+  .mc-btn{
+    background:var(--teal-800);
+    border:1px solid rgba(246,239,221,0.18);
+    color:var(--cream);
+    font-family:var(--font-body);
+    font-size:14px;
+    padding:13px 10px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .mc-btn:hover:not(:disabled){ border-color:var(--gold); }
+  .mc-btn:disabled{ cursor:default; opacity:0.85; }
+  .mc-btn.correct{ background:rgba(79,157,105,0.18); border-color:var(--green); color:var(--green); }
+  .mc-btn.wrong{ background:rgba(226,87,43,0.18); border-color:var(--coral); color:var(--coral); }
+
+  .next-btn{ min-width:140px; }
+
+  /* ---------- Summary ---------- */
+  .summary-box{
+    text-align:center;
+    background:var(--teal-800);
+    border:1px solid rgba(246,239,221,0.14);
+    border-radius:var(--radius-card);
+    padding:40px 30px;
+    max-width:420px;
+    margin:0 auto;
+  }
+  .summary-score{
+    font-family:var(--font-mono);
+    font-weight:700;
+    font-size:44px;
+    color:var(--gold);
+    margin:6px 0 4px;
+  }
+  .summary-label{
+    font-family:var(--font-mono);
+    font-size:12px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--cream-dim);
+    opacity:0.7;
+  }
+  .summary-actions{
+    display:flex;
+    gap:10px;
+    justify-content:center;
+    margin-top:26px;
+    flex-wrap:wrap;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .card{ transition:none; }
+    .cat-tab, .mode-card, .btn-solid{ transition:none; }
+  }
+
+  @media (max-width:520px){
+    .mc-grid{ grid-template-columns:1fr; }
+    .card-wrap{ height:380px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <span class="mark">Pic<span>Quiz</span></span>
+      <span class="tagline">Guess who / what</span>
+    </div>
+    <button class="btn-ghost hidden" id="btn-back">← Categories</button>
+  </div>
+
+  <!-- CATEGORY SCREEN -->
+  <section id="screen-categories">
+    <h1 class="screen-title">Pick a category</h1>
+    <p class="screen-sub">Flip the card, make your guess, see how many you know.</p>
+    <div class="cat-grid" id="cat-grid"></div>
+  </section>
+
+  <!-- CONTINENT (SUBCATEGORY) SCREEN -->
+  <section id="screen-continents" class="hidden">
+    <h1 class="screen-title" id="continent-title"></h1>
+    <p class="screen-sub">Play them all, or pick a continent to focus on.</p>
+    <div class="cat-grid" id="continent-grid"></div>
+  </section>
+
+  <!-- MODE SCREEN -->
+  <section id="screen-mode" class="hidden">
+    <h1 class="screen-title" id="mode-title"></h1>
+    <p class="screen-sub">How do you want to play?</p>
+    <div class="mode-grid">
+      <button class="mode-card" data-mode="training">
+        <span class="mode-eyebrow">No pressure</span>
+        <p class="mode-title">Training</p>
+        <p class="mode-desc">Click a card to flip and reveal the answer. Click again to move on. No score, no timer — just browse the whole set.</p>
+      </button>
+      <button class="mode-card" data-mode="timed">
+        <span class="mode-eyebrow">Hands-free</span>
+        <p class="mode-title">Timed Training</p>
+        <p class="mode-desc">Like Training, but automatic: each card flips after 2 seconds, holds the answer for 2 seconds, then moves on by itself.</p>
+      </button>
+      <button class="mode-card" data-mode="type">
+        <span class="mode-eyebrow">Quiz</span>
+        <p class="mode-title">Type the answer</p>
+        <p class="mode-desc">Type your guess, then flip the card to check. Score tracked as you go.</p>
+      </button>
+      <button class="mode-card" data-mode="mc">
+        <span class="mode-eyebrow">Quiz</span>
+        <p class="mode-title">Multiple choice</p>
+        <p class="mode-desc">Pick from four options. The card flips instantly to confirm.</p>
+      </button>
+    </div>
+
+  </section>
+
+  <!-- GAME SCREEN -->
+  <section id="screen-game" class="hidden">
+    <div class="game-header">
+      <span class="progress-pill" id="progress-pill">Item 1/100</span>
+      <span class="scoreboard hidden" id="scoreboard">SCORE 0/0</span>
+    </div>
+    <div class="stage">
+      <div class="card-wrap">
+        <div class="card" id="the-card">
+          <div class="card-face card-front" id="card-front">
+            <div class="loading-dot" id="card-loading"></div>
+            <img id="card-img" alt="" class="hidden">
+            <span class="hint-label" id="hint-label">Click to reveal</span>
+          </div>
+          <div class="card-face card-back" id="card-back">
+            <div class="answer-block">
+              <div class="answer-native" id="answer-native"></div>
+              <div class="answer-en" id="answer-en"></div>
+              <div class="answer-fr hidden" id="answer-fr"></div>
+            </div>
+            <div class="verdict hidden" id="verdict"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="answer-zone">
+        <div class="type-row hidden" id="type-row">
+          <input type="text" id="type-input" placeholder="Type your guess…" autocomplete="off">
+          <button class="btn-solid" id="type-submit">Check</button>
+        </div>
+        <div class="mc-grid hidden" id="mc-grid"></div>
+        <span class="flip-hint" id="flip-hint">Click the card to flip it</span>
+        <button class="btn-solid next-btn hidden" id="next-btn">Next →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SUMMARY SCREEN -->
+  <section id="screen-summary" class="hidden">
+    <div class="summary-box">
+      <span class="summary-label">Final score</span>
+      <div class="summary-score" id="summary-score">0/0</div>
+      <p class="screen-sub" id="summary-sub" style="margin-top:6px;">Nice run.</p>
+      <div class="summary-actions">
+        <button class="btn-solid" id="btn-play-again">Play again</button>
+        <button class="btn-ghost" id="btn-change-cat">Change category</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* =========================================================
+   DATA — static, embedded. Add new categories by pushing a
+   new entry into CATEGORY_REGISTRY below; the UI, flip logic
+   and scoring are fully generic and need no other changes.
+   ========================================================= */
+
+// Complete set of all 195 countries in the world: the 193 UN member
+// states plus the 2 UN observer states (Vatican City / Holy See and
+// Palestine). Grouped by continent, which also drives the Flags &
+// Countries subcategories below. ISO 3166-1 alpha-2 codes, matching
+// flagcdn.com's image paths.
+const CONTINENTS = [
+  { key:"africa",        label:"Africa",              icon:"🌍" },
+  { key:"asia",          label:"Asia & Middle East",  icon:"🌏" },
+  { key:"europe",        label:"Europe",              icon:"🌍" },
+  { key:"north-america", label:"North America",       icon:"🌎" },
+  { key:"south-america", label:"South America",       icon:"🌎" },
+  { key:"oceania",       label:"Oceania",             icon:"🌏" }
+];
+
+const FLAG_RAW = {
+  africa: [
+    ["dz","Algeria","الجزائر","Algérie"],["ao","Angola","Angola","Angola"],["bj","Benin","Bénin","Bénin"],["bw","Botswana","Botswana","Botswana"],["bf","Burkina Faso","Burkina Faso","Burkina Faso"],
+    ["bi","Burundi","Uburundi","Burundi"],["cv","Cabo Verde","Cabo Verde","Cap-Vert"],["cm","Cameroon","Cameroun","Cameroun"],["cf","Central African Republic","Ködörösêse tî Bêafrîka","République centrafricaine"],["td","Chad","تشاد","Tchad"],
+    ["km","Comoros","جزر القمر","Comores"],["cd","DR Congo","République démocratique du Congo","République démocratique du Congo"],["cg","Republic of the Congo","République du Congo","Congo"],["dj","Djibouti","جيبوتي","Djibouti"],["eg","Egypt","مصر","Égypte"],
+    ["gq","Equatorial Guinea","Guinea Ecuatorial","Guinée équatoriale"],["er","Eritrea","ኤርትራ","Érythrée"],["sz","Eswatini","eSwatini","Eswatini"],["et","Ethiopia","ኢትዮጵያ","Éthiopie"],["ga","Gabon","Gabon","Gabon"],
+    ["gm","Gambia","The Gambia","Gambie"],["gh","Ghana","Ghana","Ghana"],["gn","Guinea","Guinée","Guinée"],["gw","Guinea-Bissau","Guiné-Bissau","Guinée-Bissau"],["ci","Ivory Coast","Côte d'Ivoire","Côte d'Ivoire"],
+    ["ke","Kenya","Kenya","Kenya"],["ls","Lesotho","Lesotho","Lesotho"],["lr","Liberia","Liberia","Liberia"],["ly","Libya","ليبيا","Libye"],["mg","Madagascar","Madagasikara","Madagascar"],
+    ["mw","Malawi","Malawi","Malawi"],["ml","Mali","Mali","Mali"],["mr","Mauritania","موريتانيا","Mauritanie"],["mu","Mauritius","Maurice","Maurice"],["ma","Morocco","المغرب","Maroc"],
+    ["mz","Mozambique","Moçambique","Mozambique"],["na","Namibia","Namibia","Namibie"],["ne","Niger","Niger","Niger"],["ng","Nigeria","Nigeria","Nigéria"],["rw","Rwanda","Rwanda","Rwanda"],
+    ["st","Sao Tome and Principe","São Tomé e Príncipe","Sao Tomé-et-Principe"],["sn","Senegal","Sénégal","Sénégal"],["sc","Seychelles","Seychelles","Seychelles"],["sl","Sierra Leone","Sierra Leone","Sierra Leone"],["so","Somalia","Soomaaliya","Somalie"],
+    ["za","South Africa","South Africa","Afrique du Sud"],["ss","South Sudan","South Sudan","Soudan du Sud"],["sd","Sudan","السودان","Soudan"],["tz","Tanzania","Tanzania","Tanzanie"],["tg","Togo","Togo","Togo"],
+    ["tn","Tunisia","تونس","Tunisie"],["ug","Uganda","Uganda","Ouganda"],["zm","Zambia","Zambia","Zambie"],["zw","Zimbabwe","Zimbabwe","Zimbabwe"]
+  ],
+  asia: [
+    ["af","Afghanistan","افغانستان","Afghanistan"],["am","Armenia","Հայաստան","Arménie"],["az","Azerbaijan","Azərbaycan","Azerbaïdjan"],["bh","Bahrain","البحرين","Bahreïn"],["bd","Bangladesh","বাংলাদেশ","Bangladesh"],
+    ["bt","Bhutan","འབྲུག་ཡུལ་","Bhoutan"],["bn","Brunei","Brunei Darussalam","Brunei"],["kh","Cambodia","កម្ពុជា","Cambodge"],["cn","China","中国","Chine"],["cy","Cyprus","Κύπρος","Chypre"],
+    ["ge","Georgia","საქართველო","Géorgie"],["in","India","भारत","Inde"],["id","Indonesia","Indonesia","Indonésie"],["ir","Iran","ایران","Iran"],["iq","Iraq","العراق","Irak"],
+    ["il","Israel","ישראל","Israël"],["jp","Japan","日本","Japon"],["jo","Jordan","الأردن","Jordanie"],["kz","Kazakhstan","Қазақстан","Kazakhstan"],["kw","Kuwait","الكويت","Koweït"],
+    ["kg","Kyrgyzstan","Кыргызстан","Kirghizistan"],["la","Laos","ລາວ","Laos"],["lb","Lebanon","لبنان","Liban"],["my","Malaysia","Malaysia","Malaisie"],["mv","Maldives","ދިވެހިރާއްޖެ","Maldives"],
+    ["mn","Mongolia","Монгол улс","Mongolie"],["mm","Myanmar","မြန်မာ","Myanmar"],["np","Nepal","नेपाल","Népal"],["kp","North Korea","조선","Corée du Nord"],["om","Oman","عُمان","Oman"],
+    ["pk","Pakistan","پاکستان","Pakistan"],["ps","Palestine","فلسطين","Palestine"],["ph","Philippines","Pilipinas","Philippines"],["qa","Qatar","قطر","Qatar"],["sa","Saudi Arabia","السعودية","Arabie saoudite"],
+    ["sg","Singapore","Singapura","Singapour"],["kr","South Korea","대한민국","Corée du Sud"],["lk","Sri Lanka","ශ්‍රී ලංකාව","Sri Lanka"],["sy","Syria","سوريا","Syrie"],["tj","Tajikistan","Тоҷикистон","Tadjikistan"],
+    ["th","Thailand","ประเทศไทย","Thaïlande"],["tl","Timor-Leste","Timor-Leste","Timor oriental"],["tr","Turkey","Türkiye","Turquie"],["tm","Turkmenistan","Türkmenistan","Turkménistan"],["ae","United Arab Emirates","الإمارات العربية المتحدة","Émirats arabes unis"],
+    ["uz","Uzbekistan","O'zbekiston","Ouzbékistan"],["vn","Vietnam","Việt Nam","Vietnam"],["ye","Yemen","اليمن","Yémen"]
+  ],
+  europe: [
+    ["al","Albania","Shqipëria","Albanie"],["ad","Andorra","Andorra","Andorre"],["at","Austria","Österreich","Autriche"],["by","Belarus","Беларусь","Biélorussie"],["be","Belgium","België","Belgique"],
+    ["ba","Bosnia and Herzegovina","Bosna i Hercegovina","Bosnie-Herzégovine"],["bg","Bulgaria","България","Bulgarie"],["hr","Croatia","Hrvatska","Croatie"],["cz","Czechia","Česko","Tchéquie"],["dk","Denmark","Danmark","Danemark"],
+    ["ee","Estonia","Eesti","Estonie"],["fi","Finland","Suomi","Finlande"],["fr","France","France","France"],["de","Germany","Deutschland","Allemagne"],["gr","Greece","Ελλάδα","Grèce"],
+    ["hu","Hungary","Magyarország","Hongrie"],["is","Iceland","Ísland","Islande"],["ie","Ireland","Éire","Irlande"],["it","Italy","Italia","Italie"],["lv","Latvia","Latvija","Lettonie"],
+    ["li","Liechtenstein","Liechtenstein","Liechtenstein"],["lt","Lithuania","Lietuva","Lituanie"],["lu","Luxembourg","Lëtzebuerg","Luxembourg"],["mt","Malta","Malta","Malte"],["md","Moldova","Moldova","Moldavie"],
+    ["mc","Monaco","Monaco","Monaco"],["me","Montenegro","Crna Gora","Monténégro"],["nl","Netherlands","Nederland","Pays-Bas"],["mk","North Macedonia","Северна Македонија","Macédoine du Nord"],["no","Norway","Norge","Norvège"],
+    ["pl","Poland","Polska","Pologne"],["pt","Portugal","Portugal","Portugal"],["ro","Romania","România","Roumanie"],["ru","Russia","Россия","Russie"],["sm","San Marino","San Marino","Saint-Marin"],
+    ["rs","Serbia","Србија","Serbie"],["sk","Slovakia","Slovensko","Slovaquie"],["si","Slovenia","Slovenija","Slovénie"],["es","Spain","España","Espagne"],["se","Sweden","Sverige","Suède"],
+    ["ch","Switzerland","Schweiz","Suisse"],["ua","Ukraine","Україна","Ukraine"],["gb","United Kingdom","United Kingdom","Royaume-Uni"],["va","Vatican City","Città del Vaticano","Cité du Vatican"]
+  ],
+  "north-america": [
+    ["ag","Antigua and Barbuda","Antigua and Barbuda","Antigua-et-Barbuda"],["bs","Bahamas","The Bahamas","Bahamas"],["bb","Barbados","Barbados","Barbade"],["bz","Belize","Belize","Belize"],["ca","Canada","Canada","Canada"],
+    ["cr","Costa Rica","Costa Rica","Costa Rica"],["cu","Cuba","Cuba","Cuba"],["dm","Dominica","Dominica","Dominique"],["do","Dominican Republic","República Dominicana","République dominicaine"],["sv","El Salvador","El Salvador","Salvador"],
+    ["gd","Grenada","Grenada","Grenade"],["gt","Guatemala","Guatemala","Guatemala"],["ht","Haiti","Ayiti","Haïti"],["hn","Honduras","Honduras","Honduras"],["jm","Jamaica","Jamaica","Jamaïque"],
+    ["mx","Mexico","México","Mexique"],["ni","Nicaragua","Nicaragua","Nicaragua"],["pa","Panama","Panamá","Panama"],["kn","Saint Kitts and Nevis","Saint Kitts and Nevis","Saint-Christophe-et-Niévès"],["lc","Saint Lucia","Saint Lucia","Sainte-Lucie"],
+    ["vc","Saint Vincent and the Grenadines","Saint Vincent and the Grenadines","Saint-Vincent-et-les-Grenadines"],["tt","Trinidad and Tobago","Trinidad and Tobago","Trinité-et-Tobago"],["us","United States","United States","États-Unis"]
+  ],
+  "south-america": [
+    ["ar","Argentina","Argentina","Argentine"],["bo","Bolivia","Bolivia","Bolivie"],["br","Brazil","Brasil","Brésil"],["cl","Chile","Chile","Chili"],["co","Colombia","Colombia","Colombie"],
+    ["ec","Ecuador","Ecuador","Équateur"],["gy","Guyana","Guyana","Guyana"],["py","Paraguay","Paraguay","Paraguay"],["pe","Peru","Perú","Pérou"],["sr","Suriname","Suriname","Suriname"],
+    ["uy","Uruguay","Uruguay","Uruguay"],["ve","Venezuela","Venezuela","Venezuela"]
+  ],
+  oceania: [
+    ["au","Australia","Australia","Australie"],["fj","Fiji","Viti","Fidji"],["ki","Kiribati","Kiribati","Kiribati"],["mh","Marshall Islands","Aolepān Aorōkin Ṃajeḷ","Îles Marshall"],["fm","Micronesia","Micronesia","Micronésie"],
+    ["nr","Nauru","Naoero","Nauru"],["nz","New Zealand","Aotearoa","Nouvelle-Zélande"],["pw","Palau","Belau","Palaos"],["pg","Papua New Guinea","Papua New Guinea","Papouasie-Nouvelle-Guinée"],["ws","Samoa","Sāmoa","Samoa"],
+    ["sb","Solomon Islands","Solomon Islands","Îles Salomon"],["to","Tonga","Tonga","Tonga"],["tv","Tuvalu","Tuvalu","Tuvalu"],["vu","Vanuatu","Vanuatu","Vanuatu"]
+  ]
+};
+
+// Flatten into one array, tagging each flag with its continent key
+// and carrying the native-language and French names for display.
+let flagIdCounter = 0;
+const FLAG_DATA = CONTINENTS.flatMap(({key})=>
+  FLAG_RAW[key].map(([code,en,native,fr])=>({
+    id:"flag-"+(flagIdCounter++), code, answer:en, native, fr, continent:key
+  }))
+);
+
+const CELEB_NAMES = [
+  "Tom Hanks","Leonardo DiCaprio","Meryl Streep","Brad Pitt","Angelina Jolie",
+  "Johnny Depp","Robert Downey Jr.","Scarlett Johansson","Denzel Washington","Morgan Freeman",
+  "Will Smith","Tom Cruise","Julia Roberts","Jennifer Lawrence","Emma Watson",
+  "Keanu Reeves","Dwayne Johnson","Chris Hemsworth","Chris Evans","Samuel L. Jackson",
+  "Harrison Ford","Al Pacino","Robert De Niro","Jack Nicholson","Anthony Hopkins",
+  "Audrey Hepburn","Marilyn Monroe","Charlie Chaplin","Albert Einstein","Isaac Newton",
+  "Stephen Hawking","Nikola Tesla","Marie Curie","Charles Darwin","Mahatma Gandhi",
+  "Nelson Mandela","Martin Luther King Jr.","Abraham Lincoln","George Washington","Barack Obama",
+  "Donald Trump","Joe Biden","Winston Churchill","Elizabeth II","Charles III",
+  "Vladimir Putin","Angela Merkel","Elon Musk","Bill Gates","Steve Jobs",
+  "Mark Zuckerberg","Jeff Bezos","Warren Buffett","Oprah Winfrey","Michael Jackson",
+  "Elvis Presley","John Lennon","Freddie Mercury","Bob Marley","Madonna",
+  "Beyoncé","Taylor Swift","Rihanna","Lady Gaga","Elton John",
+  "Bob Dylan","Whitney Houston","Adele","Ed Sheeran","Justin Bieber",
+  "Kanye West","Jay-Z","Eminem","Drake","Michael Jordan",
+  "Muhammad Ali","Serena Williams","Cristiano Ronaldo","Lionel Messi","Usain Bolt",
+  "Tiger Woods","LeBron James","Roger Federer","Pelé","Diego Maradona",
+  "Babe Ruth","Wolfgang Amadeus Mozart","Ludwig van Beethoven","Leonardo da Vinci","Vincent van Gogh",
+  "Pablo Picasso","William Shakespeare","Walt Disney","J. K. Rowling","Stan Lee",
+  "Diana, Princess of Wales","Pope Francis","14th Dalai Lama","Mother Teresa","Malala Yousafzai"
+];
+const CELEB_DATA = CELEB_NAMES.map((name,i)=>({
+  id:"celeb-"+i,
+  answer:name,
+  wikiTitle:name.replace(/ /g,"_")
+}));
+
+/* Category registry — the single place that defines how a
+   category is displayed, imaged, and answered. Add a new key
+   here (with its own data array above) to extend the game.
+   A category can optionally define `subcategories`: a list of
+   {key,label,icon} groups whose items share a matching field
+   (e.g. `continent`) on each data item — the UI will show a
+   continent-style picker screen before the mode screen. */
+const CATEGORY_REGISTRY = {
+  flags:{
+    label:"Flags & Countries",
+    icon:"🏳️",
+    items:FLAG_DATA,
+    subcategoryField:"continent",
+    subcategories:CONTINENTS,
+    getAnswer:item=>item.answer,
+    // Native-language name is the headline; English and French follow.
+    // If the native name equals the English name, it's shown once.
+    getAnswerLines:item=>({ native:item.native, en:item.answer, fr:item.fr }),
+    getImage:async item=> `https://flagcdn.com/w320/${item.code}.png`
+  },
+  celebrities:{
+    label:"Celebrities",
+    icon:"⭐",
+    items:CELEB_DATA,
+    getAnswer:item=>item.answer,
+    getImage:async item=>{
+      const cached = imageCache.get(item.id);
+      if(cached) return cached;
+      try{
+        const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(item.wikiTitle)}`);
+        const json = await res.json();
+        const url = (json.thumbnail && json.thumbnail.source) || fallbackAvatar(item.answer);
+        imageCache.set(item.id,url);
+        return url;
+      }catch(e){
+        return fallbackAvatar(item.answer);
+      }
+    }
+  }
+};
+
+const imageCache = new Map();
+function fallbackAvatar(name){
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=E8B33D&color=16302E&size=256&bold=true`;
+}
+
+/* =========================================================
+   STATE
+   ========================================================= */
+let currentCategoryKey = null;
+let currentSubcategoryKey = null; // e.g. a continent key, or null for "all"
+let currentMode = null;       // "training" | "type" | "mc"
+let queue = [];                // shuffled items for this run
+let queueIndex = 0;
+let score = 0;
+let answered = 0;
+let currentGuess = null;       // for type mode, the checked guess
+let autoFlipTimer = null;      // Timed Training: flip-after-2s timer
+let autoAdvanceTimer = null;   // Timed Training: advance-after-2s timer
+
+function clearAutoTimers(){
+  if(autoFlipTimer){ clearTimeout(autoFlipTimer); autoFlipTimer = null; }
+  if(autoAdvanceTimer){ clearTimeout(autoAdvanceTimer); autoAdvanceTimer = null; }
+}
+
+/* =========================================================
+   DOM refs
+   ========================================================= */
+const screens = {
+  categories: document.getElementById("screen-categories"),
+  continents: document.getElementById("screen-continents"),
+  mode: document.getElementById("screen-mode"),
+  game: document.getElementById("screen-game"),
+  summary: document.getElementById("screen-summary"),
+};
+const el = id => document.getElementById(id);
+const btnBack = el("btn-back");
+
+function showScreen(name){
+  Object.values(screens).forEach(s=>s.classList.add("hidden"));
+  screens[name].classList.remove("hidden");
+  btnBack.classList.toggle("hidden", name==="categories");
+}
+
+/* Returns the items in play for the current category, narrowed to
+   the chosen subcategory (e.g. continent) when one is selected. */
+function getActiveItems(){
+  const cfg = CATEGORY_REGISTRY[currentCategoryKey];
+  if(currentSubcategoryKey && cfg.subcategoryField){
+    return cfg.items.filter(i=>i[cfg.subcategoryField]===currentSubcategoryKey);
+  }
+  return cfg.items;
+}
+
+/* =========================================================
+   CATEGORY SCREEN
+   ========================================================= */
+function renderCategories(){
+  const grid = el("cat-grid");
+  grid.innerHTML = "";
+  Object.entries(CATEGORY_REGISTRY).forEach(([key,cfg])=>{
+    const btn = document.createElement("button");
+    btn.className = "cat-tab";
+    btn.innerHTML = `
+      <span class="cat-icon">${cfg.icon}</span>
+      <p class="cat-name">${cfg.label}</p>
+      <span class="cat-count">${cfg.items.length} items</span>
+    `;
+    btn.addEventListener("click", ()=>{
+      currentCategoryKey = key;
+      currentSubcategoryKey = null;
+      if(cfg.subcategories && cfg.subcategories.length){
+        openContinentScreen(key);
+      } else {
+        openModeScreen(key, null);
+      }
+    });
+    grid.appendChild(btn);
+  });
+  const more = document.createElement("button");
+  more.className = "cat-tab";
+  more.disabled = true;
+  more.innerHTML = `
+    <span class="cat-icon">➕</span>
+    <p class="cat-name">More coming soon</p>
+    <span class="cat-count">new sets are on the way</span>
+  `;
+  grid.appendChild(more);
+}
+
+/* =========================================================
+   CONTINENT (SUBCATEGORY) SCREEN
+   ========================================================= */
+function openContinentScreen(categoryKey){
+  currentCategoryKey = categoryKey;
+  const cfg = CATEGORY_REGISTRY[categoryKey];
+  el("continent-title").textContent = cfg.label;
+
+  const grid = el("continent-grid");
+  grid.innerHTML = "";
+
+  const allBtn = document.createElement("button");
+  allBtn.className = "cat-tab";
+  allBtn.innerHTML = `
+    <span class="cat-icon">🌐</span>
+    <p class="cat-name">All continents</p>
+    <span class="cat-count">${cfg.items.length} items</span>
+  `;
+  allBtn.addEventListener("click", ()=> openModeScreen(categoryKey, null));
+  grid.appendChild(allBtn);
+
+  cfg.subcategories.forEach(sub=>{
+    const count = cfg.items.filter(i=>i[cfg.subcategoryField]===sub.key).length;
+    const btn = document.createElement("button");
+    btn.className = "cat-tab";
+    btn.innerHTML = `
+      <span class="cat-icon">${sub.icon}</span>
+      <p class="cat-name">${sub.label}</p>
+      <span class="cat-count">${count} items</span>
+    `;
+    btn.addEventListener("click", ()=> openModeScreen(categoryKey, sub.key));
+    grid.appendChild(btn);
+  });
+
+  showScreen("continents");
+}
+
+function openModeScreen(categoryKey, subcategoryKey){
+  currentCategoryKey = categoryKey;
+  currentSubcategoryKey = subcategoryKey;
+  const cfg = CATEGORY_REGISTRY[categoryKey];
+  let title = cfg.label;
+  if(subcategoryKey){
+    const sub = cfg.subcategories.find(s=>s.key===subcategoryKey);
+    if(sub) title += " — " + sub.label;
+  }
+  el("mode-title").textContent = title;
+  showScreen("mode");
+}
+
+document.querySelectorAll(".mode-card").forEach(card=>{
+  card.addEventListener("click", ()=> startGame(card.dataset.mode));
+});
+
+btnBack.addEventListener("click", ()=>{
+  clearAutoTimers();
+  currentCategoryKey = null;
+  currentSubcategoryKey = null;
+  showScreen("categories");
+});
+
+/* =========================================================
+   GAME SETUP
+   ========================================================= */
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+function startGame(mode){
+  currentMode = mode;
+  clearAutoTimers();
+  queue = shuffle(getActiveItems());
+  queueIndex = 0;
+  score = 0;
+  answered = 0;
+  el("scoreboard").classList.toggle("hidden", mode==="training" || mode==="timed");
+  showScreen("game");
+  loadCurrentItem();
+}
+
+/* =========================================================
+   CARD RENDERING
+   ========================================================= */
+const cardEl = el("the-card");
+const cardImg = el("card-img");
+const cardLoading = el("card-loading");
+const hintLabel = el("hint-label");
+const answerNativeEl = el("answer-native");
+const answerEnEl = el("answer-en");
+const answerFrEl = el("answer-fr");
+const verdictEl = el("verdict");
+const flipHint = el("flip-hint");
+const nextBtn = el("next-btn");
+const typeRow = el("type-row");
+const typeInput = el("type-input");
+const mcGrid = el("mc-grid");
+
+// Renders the card-back answer as up to three stacked lines:
+// native-language name, English name, French name. Categories
+// without getAnswerLines (e.g. celebrities) fall back to a single
+// English line.
+function renderAnswerBack(cfg, item){
+  const lines = cfg.getAnswerLines ? cfg.getAnswerLines(item) : { en: cfg.getAnswer(item) };
+  const nativeDiffers = lines.native && lines.native !== lines.en;
+
+  if(nativeDiffers){
+    answerNativeEl.textContent = lines.native;
+    answerNativeEl.classList.remove("hidden");
+    answerEnEl.textContent = lines.en;
+    answerEnEl.classList.remove("is-main");
+  } else {
+    // native name is identical to (or absent from) the English name —
+    // just show the English name as the single headline
+    answerNativeEl.textContent = "";
+    answerNativeEl.classList.add("hidden");
+    answerEnEl.textContent = lines.en;
+    answerEnEl.classList.add("is-main");
+  }
+
+  if(lines.fr && lines.fr !== lines.en){
+    answerFrEl.textContent = lines.fr;
+    answerFrEl.classList.remove("hidden");
+  } else {
+    answerFrEl.textContent = "";
+    answerFrEl.classList.add("hidden");
+  }
+}
+
+async function loadCurrentItem(){
+  clearAutoTimers();
+  const cfg = CATEGORY_REGISTRY[currentCategoryKey];
+  const item = queue[queueIndex];
+
+  // reset card visuals — snap back to front instantly (no animated
+  // unflip) so the old/new answer text never flashes into view
+  cardEl.classList.add("no-anim");
+  cardEl.classList.remove("flipped","state-correct","state-wrong");
+  void cardEl.offsetWidth; // force reflow so the class change takes effect
+  cardEl.classList.remove("no-anim");
+  verdictEl.classList.add("hidden");
+  verdictEl.textContent = "";
+  answerNativeEl.textContent = "";
+  answerEnEl.textContent = "";
+  answerFrEl.textContent = "";
+  cardImg.classList.add("hidden");
+  cardLoading.classList.remove("hidden");
+  nextBtn.classList.add("hidden");
+  currentGuess = null;
+
+  updateProgress();
+
+  // set up answer controls per mode
+  typeRow.classList.add("hidden");
+  mcGrid.classList.add("hidden");
+  flipHint.classList.remove("hidden");
+  typeInput.value = "";
+  typeInput.disabled = false;
+  el("type-submit").disabled = false;
+
+  if(currentMode==="type"){
+    typeRow.classList.remove("hidden");
+    flipHint.textContent = "Type a guess, then click the card";
+    setTimeout(()=>typeInput.focus(), 50);
+  } else if(currentMode==="mc"){
+    mcGrid.classList.remove("hidden");
+    flipHint.textContent = "Pick an answer";
+    buildMcOptions(cfg, item);
+  } else if(currentMode==="timed"){
+    flipHint.textContent = "Flipping automatically…";
+  } else {
+    flipHint.textContent = "Click the card to flip it";
+  }
+
+  renderAnswerBack(cfg, item);
+
+  // load image (async — flags resolve instantly, celeb photos fetch live)
+  const url = await cfg.getImage(item);
+  // guard against race if user already advanced
+  if(queue[queueIndex] !== item) return;
+
+  // attach handlers BEFORE setting src, so a fast/cached load can't
+  // fire the event before we're listening for it
+  cardImg.onload = ()=>{
+    cardLoading.classList.add("hidden");
+    cardImg.classList.remove("hidden");
+  };
+  cardImg.onerror = ()=>{
+    cardImg.onerror = null; // avoid loop if fallback also fails
+    cardImg.src = fallbackAvatar(cfg.getAnswer(item));
+  };
+  cardImg.alt = "";
+  cardImg.src = url;
+
+  // in case the image is already complete (e.g. served from cache
+  // synchronously) the load event may not fire at all — check directly
+  if(cardImg.complete && cardImg.naturalWidth > 0){
+    cardLoading.classList.add("hidden");
+    cardImg.classList.remove("hidden");
+  }
+
+  // Timed Training: flip automatically after 2s, hold the answer for
+  // 2s, then advance — all hands-free.
+  if(currentMode==="timed"){
+    autoFlipTimer = setTimeout(()=>{
+      autoFlipTimer = null;
+      cardEl.classList.add("flipped");
+      flipHint.classList.add("hidden");
+      autoAdvanceTimer = setTimeout(()=>{
+        autoAdvanceTimer = null;
+        advance();
+      }, 2000);
+    }, 2000);
+  }
+}
+
+function buildMcOptions(cfg, item){
+  const correct = cfg.getAnswer(item);
+  const pool = getActiveItems()
+    .map(cfg.getAnswer)
+    .filter(a=>a!==correct);
+  const distractors = shuffle(pool).slice(0,3);
+  const options = shuffle([correct, ...distractors]);
+
+  mcGrid.innerHTML = "";
+  options.forEach(optText=>{
+    const b = document.createElement("button");
+    b.className = "mc-btn";
+    b.textContent = optText;
+    b.addEventListener("click", ()=> handleMcChoice(optText, correct, b));
+    mcGrid.appendChild(b);
+  });
+}
+
+function updateProgress(){
+  el("progress-pill").textContent = `Item ${queueIndex+1}/${queue.length}`;
+  if(currentMode!=="training" && currentMode!=="timed"){
+    el("scoreboard").textContent = `SCORE ${score}/${answered}`;
+  }
+}
+
+/* =========================================================
+   INTERACTIONS
+   ========================================================= */
+cardEl.addEventListener("click", ()=>{
+  if(currentMode==="training"){
+    if(!cardEl.classList.contains("flipped")){
+      cardEl.classList.add("flipped");
+      flipHint.classList.add("hidden");
+      nextBtn.classList.remove("hidden");
+    } else {
+      advance();
+    }
+    return;
+  }
+  if(currentMode==="timed"){
+    // manual override: clicking skips ahead of whichever timer is pending
+    clearAutoTimers();
+    if(!cardEl.classList.contains("flipped")){
+      cardEl.classList.add("flipped");
+      flipHint.classList.add("hidden");
+      autoAdvanceTimer = setTimeout(()=>{
+        autoAdvanceTimer = null;
+        advance();
+      }, 2000);
+    } else {
+      advance();
+    }
+    return;
+  }
+  if(currentMode==="type"){
+    submitTypeGuess();
+  }
+  // mc mode: card flip is triggered by choosing an option, not by clicking the card
+});
+
+el("type-submit").addEventListener("click", submitTypeGuess);
+typeInput.addEventListener("keydown", e=>{
+  if(e.key==="Enter") submitTypeGuess();
+});
+
+function normalize(s){
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+}
+
+function submitTypeGuess(){
+  if(cardEl.classList.contains("flipped")) return;
+  const cfg = CATEGORY_REGISTRY[currentCategoryKey];
+  const item = queue[queueIndex];
+  const correct = cfg.getAnswer(item);
+  const guess = typeInput.value.trim();
+  const isCorrect = guess.length>0 && normalize(guess)===normalize(correct);
+  currentGuess = guess;
+  revealVerdict(isCorrect);
+  typeInput.disabled = true;
+  el("type-submit").disabled = true;
+}
+
+function handleMcChoice(chosen, correct, btnEl){
+  if(cardEl.classList.contains("flipped")) return;
+  const isCorrect = chosen===correct;
+  Array.from(mcGrid.children).forEach(b=>{
+    b.disabled = true;
+    if(b.textContent===correct) b.classList.add("correct");
+    else if(b===btnEl) b.classList.add("wrong");
+  });
+  revealVerdict(isCorrect);
+}
+
+function revealVerdict(isCorrect){
+  answered++;
+  if(isCorrect) score++;
+  cardEl.classList.add("flipped");
+  cardEl.classList.add(isCorrect ? "state-correct" : "state-wrong");
+  verdictEl.textContent = isCorrect ? "Correct" : "Not quite";
+  verdictEl.className = "verdict " + (isCorrect ? "correct" : "wrong");
+  verdictEl.classList.remove("hidden");
+  flipHint.classList.add("hidden");
+  nextBtn.classList.remove("hidden");
+  updateProgress();
+}
+
+nextBtn.addEventListener("click", advance);
+
+function advance(){
+  queueIndex++;
+  if(queueIndex >= queue.length){
+    clearAutoTimers();
+    if(currentMode==="training" || currentMode==="timed"){
+      showScreen("summary");
+      el("summary-score").textContent = `${queue.length}/${queue.length}`;
+      el("summary-sub").textContent = "You've been through the whole set.";
+    } else {
+      showScreen("summary");
+      el("summary-score").textContent = `${score}/${answered}`;
+      el("summary-sub").textContent = scoreMessage(score, answered);
+    }
+    return;
+  }
+  loadCurrentItem();
+}
+
+function scoreMessage(score, total){
+  const pct = total ? score/total : 0;
+  if(pct===1) return "Perfect run.";
+  if(pct>=0.8) return "Excellent memory.";
+  if(pct>=0.5) return "Solid effort.";
+  return "Room to grow — try Training mode!";
+}
+
+/* =========================================================
+   SUMMARY SCREEN actions
+   ========================================================= */
+el("btn-play-again").addEventListener("click", ()=> startGame(currentMode));
+el("btn-change-cat").addEventListener("click", ()=>{
+  currentCategoryKey = null;
+  currentSubcategoryKey = null;
+  showScreen("categories");
+});
+
+/* =========================================================
+   INIT
+   ========================================================= */
+renderCategories();
+showScreen("categories");
+</script>
+</body>
+</html>
