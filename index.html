@@ -3,16 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PicQuiz TV — Guess Who / What</title>
+<title>PicQuiz — Guess Who / What</title>
 <script>
-  const isLikelyTV =
-    window.screen.width >= 1920 &&
-    window.devicePixelRatio === 1 &&
-    !('ontouchstart' in window);
-
-  if (isLikelyTV) {
-    document.body.classList.add("tv-mode");
-  }
+  // Runs synchronously, before first paint, so there's no flash of
+  // un-scaled content. Detects Samsung Tizen / other smart-TV browsers
+  // by their user-agent signature and tags <html> accordingly; the
+  // CSS below then scales the whole page up 150% for that case only.
+  (function(){
+    var ua = navigator.userAgent.toLowerCase();
+    var tvSignatures = [
+      "tizen", "smart-tv", "smarttv", "webos", "web0s",
+      "netcast", "hbbtv", "viera", "aquos", "bravia",
+      "googletv", "appletv", "crkey", "roku"
+    ];
+    var isTV = tvSignatures.some(function(sig){ return ua.indexOf(sig) !== -1; });
+    if(isTV){
+      document.documentElement.classList.add("tv-mode");
+    }
+  })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -37,16 +45,21 @@
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
 
-  .tv-mode {
-    transform: scale(1.5);
-    transform-origin: top left;
+  /* On Samsung/Tizen and other smart-TV browsers (detected in the
+     head script above), scale the whole page up 150% so it reads
+     comfortably from a couch-viewing distance. `zoom` is non-standard
+     but is supported by the Chromium/WebKit engines these TV browsers
+     use, and — unlike `transform: scale()` — it reflows layout and
+     scrollbars correctly instead of just visually stretching pixels. */
+  html.tv-mode{
+    zoom:1.5;
   }
   body{
     min-height:100vh;
     background:
-      radial-gradient(circle at 15% 10%, rgba(232,179,61,0.10), transparent 40%),
-      radial-gradient(circle at 85% 85%, rgba(226,87,43,0.09), transparent 45%),
-      #14595a;
+      radial-gradient(circle at 15% 10%, rgba(232,179,61,0.08), transparent 40%),
+      radial-gradient(circle at 85% 85%, rgba(226,87,43,0.07), transparent 45%),
+      var(--teal-900);
     color:var(--cream);
     font-family:var(--font-body);
     -webkit-font-smoothing:antialiased;
@@ -663,7 +676,28 @@ const CELEB_NAMES = [
   "Tiger Woods","LeBron James","Roger Federer","Pelé","Diego Maradona",
   "Babe Ruth","Wolfgang Amadeus Mozart","Ludwig van Beethoven","Leonardo da Vinci","Vincent van Gogh",
   "Pablo Picasso","William Shakespeare","Walt Disney","J. K. Rowling","Stan Lee",
-  "Diana, Princess of Wales","Pope Francis","14th Dalai Lama","Mother Teresa","Malala Yousafzai"
+  "Diana, Princess of Wales","Pope Francis","14th Dalai Lama","Mother Teresa","Malala Yousafzai",
+  // --- added: second batch of 100 ---
+  "Cate Blanchett","Nicole Kidman","Sandra Bullock","George Clooney","Matt Damon",
+  "Ben Affleck","Charlize Theron","Natalie Portman","Hugh Jackman","Ryan Reynolds",
+  "Emma Stone","Margot Robbie","Zendaya","Timothée Chalamet","Idris Elba",
+  "Viola Davis","Sidney Poitier","Marlon Brando","Humphrey Bogart","Grace Kelly",
+  "James Dean","Clint Eastwood","Sean Connery","Daniel Craig","Judi Dench",
+  "Ian McKellen","Maggie Smith","Helen Mirren","Kate Winslet","Colin Firth",
+  "Diana Ross","David Bowie","Mick Jagger","Paul McCartney","Ringo Starr",
+  "George Harrison","Frank Sinatra","Louis Armstrong","Aretha Franklin","Stevie Wonder",
+  "Ray Charles","Johnny Cash","Dolly Parton","Céline Dion","Mariah Carey",
+  "Britney Spears","Christina Aguilera","Katy Perry","Ariana Grande","Billie Eilish",
+  "Bruno Mars","The Weeknd","Harry Styles","Shakira","Selena Quintanilla",
+  "Bad Bunny","Kobe Bryant","Wayne Gretzky","Michael Phelps","Simone Biles",
+  "Venus Williams","Rafael Nadal","Novak Djokovic","Naomi Osaka","Neymar",
+  "Kylian Mbappé","Zinedine Zidane","David Beckham","Ronaldinho","Shaquille O'Neal",
+  "Magic Johnson","Larry Bird","Wilt Chamberlain","Jesse Owens","Carl Lewis",
+  "Mike Tyson","Floyd Mayweather","Galileo Galilei","Aristotle","Plato",
+  "Socrates","Julius Caesar","Cleopatra","Napoleon Bonaparte","Genghis Khan",
+  "Alexander the Great","Christopher Columbus","Benjamin Franklin","Thomas Edison","Alexander Graham Bell",
+  "Henry Ford","Rosa Parks","Frederick Douglass","Anne Frank","Sigmund Freud",
+  "Ernest Hemingway","Mark Twain","Charles Dickens","Jane Austen","Salvador Dalí"
 ];
 const CELEB_DATA = CELEB_NAMES.map((name,i)=>({
   id:"celeb-"+i,
