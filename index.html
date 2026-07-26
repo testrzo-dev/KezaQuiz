@@ -419,6 +419,7 @@
   .mc-btn.wrong{ background:rgba(226,87,43,0.18); border-color:var(--coral); color:var(--coral); }
 
   .next-btn{ min-width:140px; }
+  .timed-pause-btn{ min-width:120px; }
 
   /* ---------- Summary ---------- */
   .summary-box{
@@ -551,6 +552,7 @@
         <div class="mc-grid hidden" id="mc-grid"></div>
         <span class="flip-hint" id="flip-hint">Click the card to flip it</span>
         <button class="btn-solid next-btn hidden" id="next-btn">Next →</button>
+        <button class="btn-ghost timed-pause-btn hidden" id="timed-pause-btn">⏸ Pause</button>
       </div>
     </div>
   </section>
@@ -764,10 +766,38 @@ let answered = 0;
 let currentGuess = null;       // for type mode, the checked guess
 let autoFlipTimer = null;      // Timed Training: flip-after-2s timer
 let autoAdvanceTimer = null;   // Timed Training: advance-after-2s timer
+let timedPaused = false;       // Timed Training: user-controlled pause state
 
 function clearAutoTimers(){
   if(autoFlipTimer){ clearTimeout(autoFlipTimer); autoFlipTimer = null; }
   if(autoAdvanceTimer){ clearTimeout(autoAdvanceTimer); autoAdvanceTimer = null; }
+}
+
+/* Timed Training's automatic flow, as a single re-entrant step:
+   if the card is still front-facing, wait 2s then flip it (and
+   schedule the advance step); if it's already flipped, wait 2s
+   then advance. Does nothing while paused, so calling it after a
+   manual flip or on resume is always safe. */
+function scheduleTimedStep(){
+  if(currentMode!=="timed" || timedPaused) return;
+  if(!cardEl.classList.contains("flipped")){
+    autoFlipTimer = setTimeout(()=>{
+      autoFlipTimer = null;
+      cardEl.classList.add("flipped");
+      flipHint.classList.add("hidden");
+      scheduleTimedStep();
+    }, 2000);
+  } else {
+    autoAdvanceTimer = setTimeout(()=>{
+      autoAdvanceTimer = null;
+      advance();
+    }, 2000);
+  }
+}
+
+function updateTimedPauseButton(){
+  const btn = el("timed-pause-btn");
+  btn.textContent = timedPaused ? "▶ Play" : "⏸ Pause";
 }
 
 /* =========================================================
@@ -911,11 +941,14 @@ function shuffle(arr){
 function startGame(mode){
   currentMode = mode;
   clearAutoTimers();
+  timedPaused = false;
   queue = shuffle(getActiveItems());
   queueIndex = 0;
   score = 0;
   answered = 0;
   el("scoreboard").classList.toggle("hidden", mode==="training" || mode==="timed");
+  el("timed-pause-btn").classList.toggle("hidden", mode!=="timed");
+  updateTimedPauseButton();
   showScreen("game");
   loadCurrentItem();
 }
@@ -1008,7 +1041,7 @@ async function loadCurrentItem(){
     flipHint.textContent = "Pick an answer";
     buildMcOptions(cfg, item);
   } else if(currentMode==="timed"){
-    flipHint.textContent = "Flipping automatically…";
+    flipHint.textContent = timedPaused ? "Paused — press play to continue" : "Flipping automatically…";
   } else {
     flipHint.textContent = "Click the card to flip it";
   }
@@ -1041,17 +1074,9 @@ async function loadCurrentItem(){
   }
 
   // Timed Training: flip automatically after 2s, hold the answer for
-  // 2s, then advance — all hands-free.
+  // 2s, then advance — all hands-free (unless paused).
   if(currentMode==="timed"){
-    autoFlipTimer = setTimeout(()=>{
-      autoFlipTimer = null;
-      cardEl.classList.add("flipped");
-      flipHint.classList.add("hidden");
-      autoAdvanceTimer = setTimeout(()=>{
-        autoAdvanceTimer = null;
-        advance();
-      }, 2000);
-    }, 2000);
+    scheduleTimedStep();
   }
 }
 
@@ -1095,18 +1120,17 @@ cardEl.addEventListener("click", ()=>{
     return;
   }
   if(currentMode==="timed"){
-    // manual override: clicking skips ahead of whichever timer is pending
+    // manual override: clicking skips ahead of whichever timer is pending.
+    // If not paused, the automatic flow simply continues from here.
     clearAutoTimers();
     if(!cardEl.classList.contains("flipped")){
       cardEl.classList.add("flipped");
       flipHint.classList.add("hidden");
-      autoAdvanceTimer = setTimeout(()=>{
-        autoAdvanceTimer = null;
-        advance();
-      }, 2000);
     } else {
       advance();
+      return;
     }
+    scheduleTimedStep();
     return;
   }
   if(currentMode==="type"){
@@ -1162,6 +1186,23 @@ function revealVerdict(isCorrect){
 }
 
 nextBtn.addEventListener("click", advance);
+
+el("timed-pause-btn").addEventListener("click", ()=>{
+  timedPaused = !timedPaused;
+  updateTimedPauseButton();
+  if(timedPaused){
+    clearAutoTimers();
+    if(!cardEl.classList.contains("flipped")){
+      flipHint.textContent = "Paused — press play to continue";
+      flipHint.classList.remove("hidden");
+    }
+  } else {
+    if(!cardEl.classList.contains("flipped")){
+      flipHint.textContent = "Flipping automatically…";
+    }
+    scheduleTimedStep();
+  }
+});
 
 function advance(){
   queueIndex++;
